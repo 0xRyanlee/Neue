@@ -155,7 +155,8 @@ export const generateStudioImage = async (
   }
 
   // Determine model based on tier
-  const modelName = config.modelTier || 'gemini-2.5-flash';
+  // Default to Imagen 3 if not specified
+  const modelName = config.modelTier || 'imagen-3.0-generate-001';
 
   // Image Config
   const imageConfig: any = {
@@ -163,12 +164,8 @@ export const generateStudioImage = async (
   };
 
   // Imagen 3/4 specific config
-  if (modelName.includes('imagen')) {
-    // strict adherence to aspect ratio enum is fine for Imagen
-  } else {
-    // Nano Banana (Gemini 2.5) might need simpler prompts or different params
-    // but usually shares the same config structure for image gen
-  }
+  // Imagen specific config cleaning
+  // if (modelName.includes('imagen')) { ... }
 
   try {
     // TIMEOUT WRAPPER
@@ -196,9 +193,12 @@ export const generateStudioImage = async (
 
     throw new Error("No image generated.");
   } catch (error: any) {
-    console.error("Generation Error:", error);
+    console.error("Generation Error Details:", error);
+    // Explicitly alert the user for debugging purposes
+    alert(`Generation Failed: ${error.message}`);
+
     if (error.message?.includes('403') || error.toString().includes('Permission denied')) {
-      throw new Error(`Permission Denied for model ${modelName}. Try switching to 'Standard' tier or use a paid API key.`);
+      throw new Error(`Permission Denied. Please ensure your API Key supports ${modelName}.`);
     }
     throw error;
   }
