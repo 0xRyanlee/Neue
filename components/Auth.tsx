@@ -3,7 +3,11 @@ import { supabase } from '../services/supabase';
 import { Lock, Smartphone } from 'lucide-react';
 import { Button } from './Button';
 
-export const Auth: React.FC = () => {
+interface AuthProps {
+    onSkip: () => void;
+}
+
+export const Auth: React.FC<AuthProps> = ({ onSkip }) => {
     const [loading, setLoading] = useState(false);
 
     const handleGoogleLogin = async () => {

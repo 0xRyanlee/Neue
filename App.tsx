@@ -27,6 +27,8 @@ const App: React.FC = () => {
   const [showSettings, setShowSettings] = useState(false);
 
   // Initialize Session
+  const [isGuest, setIsGuest] = useState(localStorage.getItem('neue_guest_mode') === 'true');
+
   useEffect(() => {
     supabase.auth.getSession().then(({ data: { session } }) => {
       setSession(session);
