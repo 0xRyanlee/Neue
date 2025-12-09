@@ -19,8 +19,8 @@ export enum PhotoStyle {
 }
 
 export enum ModelTier {
-  STANDARD = "gemini-3-pro-image-preview",   // "Nano Banana Pro"
-  PRO = "gemini-3-pro-image-preview"        // High Fidelity
+  STANDARD = "gemini-2.5-flash",             // "Nano Banana" - $0.039/img
+  PRO = "gemini-3-pro-image-preview"         // "Nano Banana Pro" - $0.134/img
 }
 
 export interface TagCategory {

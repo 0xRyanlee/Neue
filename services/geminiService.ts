@@ -155,8 +155,8 @@ export const generateStudioImage = async (
   }
 
   // Determine model based on tier
-  // Default to Nano Banana Pro (Gemini 3 Pro)
-  const modelName = config.modelTier || 'gemini-3-pro-image-preview';
+  // Default to Standard (2.5 Flash / Nano Banana) for cost efficiency
+  const modelName = config.modelTier || 'gemini-2.5-flash';
 
   // Image Config
   const imageConfig: any = {
