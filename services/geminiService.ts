@@ -155,15 +155,15 @@ export const generateStudioImage = async (
   }
 
   // Determine model based on tier
-  // Default to Standard (2.5 Flash / Nano Banana) for cost efficiency
-  const modelName = config.modelTier || 'gemini-2.5-flash';
+  // Default to Standard (2.0 Flash Exp) for cost efficiency
+  const modelName = config.modelTier || 'gemini-2.0-flash-exp';
 
   // Image Config
   const imageConfig: any = {};
 
-  // Aspect Ratio is NOT supported on 2.5 Flash (Standard)
+  // Aspect Ratio is NOT supported on 2.0 Flash (Standard)
   // Only add it if we are using Pro (Gemini 3)
-  if (!modelName.includes('gemini-2.5-flash')) {
+  if (!modelName.includes('gemini-2.0-flash')) {
     imageConfig.aspectRatio = config.aspectRatio;
   }
 
