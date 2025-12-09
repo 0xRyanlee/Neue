@@ -13,7 +13,7 @@ export const getApiKey = (): string => {
   if (localKey) return localKey;
 
   // Check Process Env (injected by build tool or AI Studio)
-  const envKey = process.env.API_KEY;
+  const envKey = process.env.GEMINI_API_KEY || import.meta.env.VITE_GEMINI_API_KEY; // Support Vite env
   if (envKey) return envKey;
 
   throw new Error("API Key missing. Please connect your account or enter a key in settings.");
@@ -22,7 +22,7 @@ export const getApiKey = (): string => {
 // 1. Chat Consultation Service
 export const createConsultationChat = (config: GenerationConfig): Chat => {
   const ai = new GoogleGenAI({ apiKey: getApiKey() });
-  
+
   const systemInstruction = `
     You are "Neue", a strict, minimalist art director and professional photographer.
     Your aesthetic is Swiss International Style: clean, objective, grid-based.
@@ -64,8 +64,8 @@ export const sendMessageToChat = async (chat: Chat, message: string): Promise<st
 // 2. Tag Analysis Service (Smart Context)
 export const analyzeTagsFromContext = async (userText: string): Promise<Partial<GenerationConfig>> => {
   const ai = new GoogleGenAI({ apiKey: getApiKey() });
-  
-  const categoriesDescription = TAG_CATEGORIES.map(cat => 
+
+  const categoriesDescription = TAG_CATEGORIES.map(cat =>
     `${cat.id}: [${cat.options.join(', ')}]`
   ).join('\n');
 
@@ -109,7 +109,7 @@ export const analyzeTagsFromContext = async (userText: string): Promise<Partial<
 
 // 3. Image Generation Service
 export const generateStudioImage = async (
-  config: GenerationConfig, 
+  config: GenerationConfig,
   promptOverride?: string
 ): Promise<string> => {
   const ai = new GoogleGenAI({ apiKey: getApiKey() });
@@ -132,6 +132,7 @@ export const generateStudioImage = async (
     ${promptOverride ? `Specific instructions: ${promptOverride}` : ''}
   `;
 
+  // Imagen Model expects prompt as 'text' part
   const contents: any = {
     parts: [{ text: basePrompt }]
   };
@@ -139,11 +140,14 @@ export const generateStudioImage = async (
   // Add reference images if they exist
   if (config.referenceImages.length > 0) {
     config.referenceImages.forEach(base64Data => {
-      // Strip header if present
-      const cleanBase64 = base64Data.split(',')[1] || base64Data;
+      // Extract specific mime type if available, default to jpeg
+      const mimeMatch = base64Data.match(/^data:(image\/[a-zA-Z+]+);base64,/);
+      const mimeType = mimeMatch ? mimeMatch[1] : 'image/jpeg';
+      const cleanBase64 = base64Data.replace(/^data:image\/[a-z]+;base64,/, "");
+
       contents.parts.push({
         inlineData: {
-          mimeType: 'image/jpeg', 
+          mimeType: mimeType,
           data: cleanBase64
         }
       });
@@ -151,27 +155,36 @@ export const generateStudioImage = async (
   }
 
   // Determine model based on tier
-  // Default to 2.5 flash image (Nano Banana) if standard, 3 Pro if Pro.
-  const modelName = config.modelTier || 'gemini-2.5-flash-image';
-  
+  const modelName = config.modelTier || 'gemini-2.5-flash';
+
   // Image Config
-  // gemini-3-pro-image-preview supports 'imageSize', gemini-2.5-flash-image does NOT.
   const imageConfig: any = {
     aspectRatio: config.aspectRatio,
   };
 
-  if (modelName === 'gemini-3-pro-image-preview') {
-    imageConfig.imageSize = "2K"; // Only available on Pro
+  // Imagen 3/4 specific config
+  if (modelName.includes('imagen')) {
+    // strict adherence to aspect ratio enum is fine for Imagen
+  } else {
+    // Nano Banana (Gemini 2.5) might need simpler prompts or different params
+    // but usually shares the same config structure for image gen
   }
 
   try {
-    const response = await ai.models.generateContent({
+    // TIMEOUT WRAPPER
+    const timeoutPromise = new Promise((_, reject) =>
+      setTimeout(() => reject(new Error("Request timed out (15s). Please try again.")), 15000)
+    );
+
+    const apiPromise = ai.models.generateContent({
       model: modelName,
       contents: contents,
       config: {
         imageConfig: imageConfig
       }
     });
+
+    const response: any = await Promise.race([apiPromise, timeoutPromise]);
 
     // Extract image
     // Note: 2.5 Flash and 3 Pro both return inlineData in parts.
@@ -180,12 +193,12 @@ export const generateStudioImage = async (
         return `data:image/png;base64,${part.inlineData.data}`;
       }
     }
-    
+
     throw new Error("No image generated.");
   } catch (error: any) {
     console.error("Generation Error:", error);
     if (error.message?.includes('403') || error.toString().includes('Permission denied')) {
-        throw new Error(`Permission Denied for model ${modelName}. Try switching to 'Standard' tier or use a paid API key.`);
+      throw new Error(`Permission Denied for model ${modelName}. Try switching to 'Standard' tier or use a paid API key.`);
     }
     throw error;
   }
