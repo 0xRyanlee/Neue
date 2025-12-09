@@ -159,9 +159,13 @@ export const generateStudioImage = async (
   const modelName = config.modelTier || 'gemini-2.5-flash';
 
   // Image Config
-  const imageConfig: any = {
-    aspectRatio: config.aspectRatio,
-  };
+  const imageConfig: any = {};
+
+  // Aspect Ratio is NOT supported on 2.5 Flash (Standard)
+  // Only add it if we are using Pro (Gemini 3)
+  if (!modelName.includes('gemini-2.5-flash')) {
+    imageConfig.aspectRatio = config.aspectRatio;
+  }
 
   // Imagen 3/4 specific config
   // Imagen specific config cleaning
