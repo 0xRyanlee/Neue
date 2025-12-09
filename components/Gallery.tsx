@@ -13,6 +13,76 @@ export const Gallery: React.FC<GalleryProps> = ({ onUsePrompt, compact = false }
   const [filter, setFilter] = useState('trending');
   const [items, setItems] = useState<GalleryItem[]>([]);
   const [loading, setLoading] = useState(true);
+  const [likedItems, setLikedItems] = useState<Set<string>>(new Set());
+  const [session, setSession] = useState<any>(null);
+
+  useEffect(() => {
+    supabase.auth.getSession().then(({ data: { session } }) => {
+      setSession(session);
+      if (session) fetchUserLikes(session.user.id);
+    });
+  }, []);
+
+  const fetchUserLikes = async (userId: string) => {
+    const { data } = await supabase.from('likes').select('generation_id').eq('user_id', userId);
+    if (data) {
+      setLikedItems(new Set(data.map((l: any) => l.generation_id)));
+    }
+  };
+
+  const handleLike = async (generationId: string, currentCount: number) => {
+    if (!session) {
+      alert("Please login to like images.");
+      return;
+    }
+
+    const isLiked = likedItems.has(generationId);
+    const newLiked = new Set(likedItems);
+
+    // Optimistic Update
+    if (isLiked) {
+      newLiked.delete(generationId);
+    } else {
+      newLiked.add(generationId);
+    }
+    setLikedItems(newLiked);
+
+    try {
+      if (isLiked) {
+        await supabase.from('likes').delete().match({ user_id: session.user.id, generation_id: generationId });
+      } else {
+        await supabase.from('likes').insert({ user_id: session.user.id, generation_id: generationId });
+      }
+    } catch (err) {
+      console.error("Like failed", err);
+      // Revert if needed, MVP ignores revert
+    }
+  };
+
+  const handleShare = async (item: GalleryItem) => {
+    if (navigator.share) {
+      try {
+        await navigator.share({
+          title: 'Neue Studio',
+          text: `Check out this AI generation: ${item.prompt}`,
+          url: item.url
+        });
+      } catch (err) {
+        console.log('Share canceled');
+      }
+    } else {
+      navigator.clipboard.writeText(item.url);
+      alert("Image URL copied to clipboard!");
+    }
+  };
+
+  const handleRemixClick = async (item: GalleryItem) => {
+    if (onUsePrompt) {
+      onUsePrompt(item.prompt, item.config);
+      // Fire and forget usage increment
+      supabase.rpc('increment_usage', { row_id: item.id });
+    }
+  };
 
   // Fetch Real Data
   useEffect(() => {
@@ -33,8 +103,9 @@ export const Gallery: React.FC<GalleryProps> = ({ onUsePrompt, compact = false }
             id: item.id,
             url: item.image_url,
             prompt: item.prompt,
-            author: 'User ' + item.user_id.slice(0, 4), // Anon logic for now
-            likes: item.likes || 0,
+            author: item.user_id ? 'User ' + item.user_id.slice(0, 4) : 'Anonymous',
+            likes: item.likes_count || 0,
+            usageCount: item.usage_count || 0,
             tags: [item.config?.style || 'Style', item.config?.lighting || 'Light'],
             config: item.config
           }));
@@ -106,7 +177,7 @@ export const Gallery: React.FC<GalleryProps> = ({ onUsePrompt, compact = false }
                   {onUsePrompt && (
                     <Button
                       size="sm"
-                      onClick={() => onUsePrompt(item.prompt, item.config)}
+                      onClick={() => handleRemixClick(item)}
                       className="w-full bg-white text-black hover:bg-gray-200 border-none"
                     >
                       <Wand2 size={14} className="mr-2" /> REMIX THIS
@@ -123,11 +194,14 @@ export const Gallery: React.FC<GalleryProps> = ({ onUsePrompt, compact = false }
                     <span className="text-xs font-bold truncate max-w-[100px]">{item.author}</span>
                   </div>
                   <div className="flex items-center gap-3 text-gray-400">
-                    <button className="flex items-center gap-1 hover:text-red-500 transition-colors">
-                      <Heart size={14} />
-                      <span className="text-[10px] font-mono">{item.likes}</span>
+                    <button
+                      onClick={() => handleLike(item.id, item.likes)}
+                      className="flex items-center gap-1 hover:text-red-500 transition-colors group/like"
+                    >
+                      <Heart size={14} className={likedItems.has(item.id) ? "fill-red-500 text-red-500" : "group-hover/like:text-red-500"} />
+                      <span className="text-[10px] font-mono">{likedItems.has(item.id) ? item.likes + 1 : item.likes}</span>
                     </button>
-                    <button className="hover:text-black transition-colors">
+                    <button onClick={() => handleShare(item)} className="hover:text-black transition-colors">
                       <Share2 size={14} />
                     </button>
                   </div>
