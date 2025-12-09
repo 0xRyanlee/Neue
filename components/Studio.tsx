@@ -41,14 +41,34 @@ export const Studio: React.FC<StudioProps> = ({ initialConfig, onPublish, initia
         referenceImages: []
     });
 
-    // Session State (New)
+    // Session & Profile State
     const [session, setSession] = useState<any>(null);
+    const [credits, setCredits] = useState<number>(0);
 
+    // Fetch Session & Profile
     useEffect(() => {
-        supabase.auth.getSession().then(({ data: { session } }) => setSession(session));
-        const { data: { subscription } } = supabase.auth.onAuthStateChange((_event, session) => setSession(session));
+        supabase.auth.getSession().then(({ data: { session } }) => {
+            setSession(session);
+            if (session) fetchProfile(session.user.id);
+        });
+
+        const { data: { subscription } } = supabase.auth.onAuthStateChange((_event, session) => {
+            setSession(session);
+            if (session) fetchProfile(session.user.id);
+        });
+
         return () => subscription.unsubscribe();
     }, []);
+
+    const fetchProfile = async (userId: string) => {
+        const { data, error } = await supabase
+            .from('profiles')
+            .select('credits')
+            .eq('id', userId)
+            .single();
+
+        if (data) setCredits(data.credits);
+    };
 
     // Smart Input State
     const [smartInput, setSmartInput] = useState(initialSmartInput || '');
@@ -151,7 +171,17 @@ export const Studio: React.FC<StudioProps> = ({ initialConfig, onPublish, initia
         }
     };
 
+    const GENERATION_COST = 5;
+
     const handleGenerate = async () => {
+        // 1. Check Credits (if logged in)
+        if (session) {
+            if (credits < GENERATION_COST) {
+                alert(`Insufficient Credits. You need ${GENERATION_COST} credits to generate.`);
+                return;
+            }
+        }
+
         setIsGenerating(true);
         setError(null);
         setHasPublishedCurrent(false);
@@ -176,6 +206,22 @@ export const Studio: React.FC<StudioProps> = ({ initialConfig, onPublish, initia
             setHistory(prev => [...prev, imgUrl]);
             setViewIndex(prev => prev + 1); // Move to the newest
             setHasGeneratedOnce(true);
+
+            // 2. Deduct Credits (if logged in)
+            if (session) {
+                const newBalance = credits - GENERATION_COST;
+                setCredits(newBalance); // Optimistic UI update
+
+                // Backend Update
+                await supabase.from('profiles').update({ credits: newBalance }).eq('id', session.user.id);
+
+                // Log Transaction (Async, don't await)
+                supabase.from('credit_transactions').insert({
+                    user_id: session.user.id,
+                    amount: -GENERATION_COST,
+                    type: 'generation'
+                });
+            }
 
         } catch (err: any) {
             setError(err.message || "Failed to generate image.");
@@ -254,6 +300,14 @@ export const Studio: React.FC<StudioProps> = ({ initialConfig, onPublish, initia
 
     return (
         <div className="max-w-7xl mx-auto px-6 py-12">
+
+            {/* HEADER: Credits Display */}
+            {session && (
+                <div className="absolute top-6 right-6 z-50 flex items-center gap-2 bg-white/80 backdrop-blur border border-gray-200 px-3 py-1.5 rounded-full shadow-sm">
+                    <Zap size={14} className="text-yellow-500 fill-yellow-500" />
+                    <span className="font-mono text-xs font-bold">{credits} CREDITS</span>
+                </div>
+            )}
 
             {/* Publish Modal */}
             {isPublishModalOpen && (

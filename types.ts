@@ -19,8 +19,8 @@ export enum PhotoStyle {
 }
 
 export enum ModelTier {
-  STANDARD = "imagen-3.0-generate-001", // Standard
-  PRO = "imagen-3.0-generate-001"   // Pro
+  STANDARD = "gemini-3-pro-image-preview",   // "Nano Banana Pro"
+  PRO = "gemini-3-pro-image-preview"        // High Fidelity
 }
 
 export interface TagCategory {
@@ -59,4 +59,11 @@ export interface GenerationConfig {
   environment: string;
   pose: string;
   referenceImages: string[]; // Base64 strings
+}
+
+export interface UserProfile {
+  id: string;
+  username: string;
+  avatar_url: string;
+  credits: number;
 }

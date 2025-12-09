@@ -155,8 +155,8 @@ export const generateStudioImage = async (
   }
 
   // Determine model based on tier
-  // Default to Imagen 3 if not specified
-  const modelName = config.modelTier || 'imagen-3.0-generate-001';
+  // Default to Nano Banana Pro (Gemini 3 Pro)
+  const modelName = config.modelTier || 'gemini-3-pro-image-preview';
 
   // Image Config
   const imageConfig: any = {
