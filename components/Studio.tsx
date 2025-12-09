@@ -1,6 +1,18 @@
+import React, { useState, useEffect } from 'react';
+import { TagSelector } from './TagSelector';
+import { ChatInterface } from './ChatInterface';
+import { TAG_CATEGORIES } from '../constants';
+import { GenerationConfig, AspectRatio, PhotoStyle, ChatMessage, ModelTier } from '../types';
+import { Button } from './Button';
+import { createConsultationChat, sendMessageToChat, generateStudioImage, analyzeTagsFromContext } from '../services/geminiService';
 import { supabase } from '../services/supabase';
+import { Upload, Download, RotateCcw, Image as ImageIcon, Sparkles, MessageSquare, Wand2, Zap, Crown, Share2, Film, ChevronLeft, ChevronRight, X } from 'lucide-react';
 
-// ... (keep existing imports)
+interface StudioProps {
+    initialConfig?: Partial<GenerationConfig>;
+    onPublish?: (imageUrl: string, config: GenerationConfig, prompt: string) => void;
+    initialSmartInput?: string;
+}
 
 // Helper: Convert Data URI to Blob
 const dataURItoBlob = (dataURI: string) => {
@@ -14,12 +26,22 @@ const dataURItoBlob = (dataURI: string) => {
     return new Blob([ab], { type: mimeString });
 };
 
-// ... (Interface StudioProps remains)
-
 export const Studio: React.FC<StudioProps> = ({ initialConfig, onPublish, initialSmartInput }) => {
-    // ... (keep existing state)
+    const [mode, setMode] = useState<'fast' | 'consultation'>('fast');
 
-    // Session State
+    // Config State
+    const [config, setConfig] = useState<GenerationConfig>({
+        modelTier: ModelTier.STANDARD, // Default to free tier
+        aspectRatio: AspectRatio.PORTRAIT,
+        style: PhotoStyle.ID_PHOTO,
+        lighting: TAG_CATEGORIES.find(c => c.id === 'lighting')?.options[0] || '',
+        camera: TAG_CATEGORIES.find(c => c.id === 'camera')?.options[0] || '',
+        environment: TAG_CATEGORIES.find(c => c.id === 'environment')?.options[0] || '',
+        pose: TAG_CATEGORIES.find(c => c.id === 'pose')?.options[0] || '',
+        referenceImages: []
+    });
+
+    // Session State (New)
     const [session, setSession] = useState<any>(null);
 
     useEffect(() => {
@@ -28,16 +50,146 @@ export const Studio: React.FC<StudioProps> = ({ initialConfig, onPublish, initia
         return () => subscription.unsubscribe();
     }, []);
 
-    // ... (keep Chat/SmartInput/History state)
+    // Smart Input State
+    const [smartInput, setSmartInput] = useState(initialSmartInput || '');
+    const [isAnalyzing, setIsAnalyzing] = useState(false);
 
-    // ... (keep useEffects)
+    // History / Gacha State
+    const [history, setHistory] = useState<string[]>([]);
+    const [viewIndex, setViewIndex] = useState<number>(-1); // -1 means no image yet
+    const [isPublishModalOpen, setIsPublishModalOpen] = useState(false);
+
+    // Sync props to state if they change
+    useEffect(() => {
+        if (initialSmartInput) {
+            setSmartInput(initialSmartInput);
+        }
+    }, [initialSmartInput]);
+
+    // Handle Initial Config
+    useEffect(() => {
+        if (initialConfig) {
+            setConfig(prev => ({ ...prev, ...initialConfig }));
+        }
+    }, [initialConfig]);
+
+    // Chat State
+    const [messages, setMessages] = useState<ChatMessage[]>([]);
+    const [chatInstance, setChatInstance] = useState<any>(null);
+    const [isChatProcessing, setIsChatProcessing] = useState(false);
+
+    // Generation State
+    const [isGenerating, setIsGenerating] = useState(false);
+    const [error, setError] = useState<string | null>(null);
+    const [hasPublishedCurrent, setHasPublishedCurrent] = useState(false);
+
+    // Layout State
+    const [hasGeneratedOnce, setHasGeneratedOnce] = useState(false);
+
+    // Initialize Chat
+    useEffect(() => {
+        if (!chatInstance && mode === 'consultation') {
+            const chat = createConsultationChat(config);
+            setChatInstance(chat);
+            setMessages([{
+                role: 'model',
+                content: `neue studio online. style: ${config.style}. upload references or describe your vision.`
+            }]);
+        }
+    }, [mode, chatInstance, config.style]);
+
+    const handleTagSelect = (categoryId: string, option: string) => {
+        setConfig(prev => ({ ...prev, [categoryId]: option }));
+    };
+
+    const handleSmartAnalyze = async () => {
+        if (!smartInput.trim()) return;
+        setIsAnalyzing(true);
+        try {
+            const newTags = await analyzeTagsFromContext(smartInput);
+            setConfig(prev => ({
+                ...prev,
+                ...newTags
+            }));
+        } catch (e) {
+            console.error(e);
+        } finally {
+            setIsAnalyzing(false);
+        }
+    };
+
+    const handleFileUpload = (e: React.ChangeEvent<HTMLInputElement>) => {
+        if (e.target.files && e.target.files.length > 0) {
+            const files = Array.from(e.target.files).slice(0, 3);
+            const promises = files.map(file => {
+                return new Promise<string>((resolve, reject) => {
+                    const reader = new FileReader();
+                    reader.onload = () => resolve(reader.result as string);
+                    reader.onerror = reject;
+                    reader.readAsDataURL(file);
+                });
+            });
+
+            Promise.all(promises).then(images => {
+                setConfig(prev => ({ ...prev, referenceImages: images }));
+                if (mode === 'consultation') {
+                    setMessages(prev => [...prev, { role: 'system', content: `User uploaded ${images.length} reference images.` }]);
+                }
+            });
+        }
+    };
+
+    const handleSendMessage = async (text: string) => {
+        if (!chatInstance) return;
+        setMessages(prev => [...prev, { role: 'user', content: text }]);
+        setIsChatProcessing(true);
+        try {
+            const responseText = await sendMessageToChat(chatInstance, text);
+            setMessages(prev => [...prev, { role: 'model', content: responseText }]);
+        } finally {
+            setIsChatProcessing(false);
+        }
+    };
+
+    const handleGenerate = async () => {
+        setIsGenerating(true);
+        setError(null);
+        setHasPublishedCurrent(false);
+
+        // Determine context based on mode
+        let promptOverride = "";
+        if (mode === 'consultation') {
+            promptOverride = messages
+                .filter(m => m.role === 'user')
+                .slice(-3)
+                .map(m => m.content)
+                .join(" ");
+        } else {
+            // In Fast mode, we check for smart input first
+            promptOverride = smartInput ? `Context: ${smartInput}. Follow tags.` : "Follow tags strictly. High fidelity.";
+        }
+
+        try {
+            const imgUrl = await generateStudioImage(config, promptOverride);
+
+            // Gacha Logic: Add to history, set view to new image
+            setHistory(prev => [...prev, imgUrl]);
+            setViewIndex(prev => prev + 1); // Move to the newest
+            setHasGeneratedOnce(true);
+
+        } catch (err: any) {
+            setError(err.message || "Failed to generate image.");
+        } finally {
+            setIsGenerating(false);
+        }
+    };
 
     const handleSaveToSupabase = async (isPublic: boolean) => {
         const currentImage = history[viewIndex];
         if (!currentImage || !session) return;
 
         try {
-            setIsGenerating(true); // Re-use loading state or add new one
+            setIsGenerating(true);
 
             // 1. Upload to Storage
             const blob = dataURItoBlob(currentImage);
@@ -69,7 +221,7 @@ export const Studio: React.FC<StudioProps> = ({ initialConfig, onPublish, initia
 
             setHasPublishedCurrent(true);
             setIsPublishModalOpen(false);
-            alert("Saved to Gallery!"); // Replace with Toast later
+            // Optional: Trigger global refresh or toast
 
         } catch (err: any) {
             setError(err.message);
@@ -82,14 +234,23 @@ export const Studio: React.FC<StudioProps> = ({ initialConfig, onPublish, initia
         if (session) {
             handleSaveToSupabase(isPublic);
         } else {
-            // Should not happen if UI is correct, but safe guard
             supabase.auth.signInWithOAuth({ provider: 'google', options: { redirectTo: window.location.origin } });
         }
     };
 
-    // ... (Keep downloadImage)
+    const downloadImage = () => {
+        const currentImage = history[viewIndex];
+        if (currentImage) {
+            const link = document.createElement('a');
+            link.href = currentImage;
+            link.download = `neue-studio-output-${Date.now()}.png`;
+            document.body.appendChild(link);
+            link.click();
+            document.body.removeChild(link);
+        }
+    };
 
-    // ... (Keep render until Modal)
+    const currentImage = viewIndex >= 0 ? history[viewIndex] : null;
 
     return (
         <div className="max-w-7xl mx-auto px-6 py-12">
@@ -167,12 +328,7 @@ export const Studio: React.FC<StudioProps> = ({ initialConfig, onPublish, initia
                 </div>
             )}
 
-
             {/* Main Grid Layout */}
-            {/* 
-          State 1 (Initial): Content Centered (max-w-3xl)
-          State 2 (Generated): Split View (grid-cols-12)
-      */}
             <div className={`transition-all duration-700 ${hasGeneratedOnce ? 'grid grid-cols-1 lg:grid-cols-12 gap-8' : 'max-w-3xl mx-auto'}`}>
 
                 {/* LEFT COLUMN: Controls */}
@@ -280,12 +436,12 @@ export const Studio: React.FC<StudioProps> = ({ initialConfig, onPublish, initia
                                     key={ratio}
                                     onClick={() => setConfig(prev => ({ ...prev, aspectRatio: ratio }))}
                                     className={`
-                            px-3 py-1.5 rounded-full text-[10px] font-bold border transition-all
-                            ${config.aspectRatio === ratio
+                                  px-3 py-1.5 rounded-full text-[10px] font-bold border transition-all
+                                  ${config.aspectRatio === ratio
                                             ? 'border-black bg-black text-white'
                                             : 'border-gray-300 text-gray-400 hover:border-gray-500 hover:text-black'
                                         }
-                        `}
+                              `}
                                 >
                                     {ratio}
                                 </button>
@@ -334,9 +490,9 @@ export const Studio: React.FC<StudioProps> = ({ initialConfig, onPublish, initia
 
                         {/* Output Panel */}
                         <div className={`
-                bg-white rounded-none border-2 border-black p-0 flex flex-col relative overflow-hidden h-[700px] shadow-[12px_12px_0px_0px_rgba(0,0,0,1)]
-                ${mode === 'fast' ? 'lg:col-span-8' : 'lg:col-span-1'}
-                `}>
+                      bg-white rounded-none border-2 border-black p-0 flex flex-col relative overflow-hidden h-[700px] shadow-[12px_12px_0px_0px_rgba(0,0,0,1)]
+                      ${mode === 'fast' ? 'lg:col-span-8' : 'lg:col-span-1'}
+                  `}>
                             {/* Header */}
                             <div className="h-12 border-b-2 border-black bg-gray-50 flex items-center justify-between px-4">
                                 <div className="flex items-center gap-2">
@@ -396,9 +552,9 @@ export const Studio: React.FC<StudioProps> = ({ initialConfig, onPublish, initia
                                         key={idx}
                                         onClick={() => setViewIndex(idx)}
                                         className={`
-                                    relative h-full aspect-[3/4] cursor-pointer transition-all border-2
-                                    ${viewIndex === idx ? 'border-white opacity-100 scale-105 z-10' : 'border-transparent opacity-40 hover:opacity-80'}
-                                `}
+                                      relative h-full aspect-[3/4] cursor-pointer transition-all border-2
+                                      ${viewIndex === idx ? 'border-white opacity-100 scale-105 z-10' : 'border-transparent opacity-40 hover:opacity-80'}
+                                  `}
                                     >
                                         <img src={img} className="w-full h-full object-cover" />
                                         <div className="absolute top-0 right-0 bg-black text-white text-[8px] px-1 font-mono">
