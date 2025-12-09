@@ -19,10 +19,6 @@ const App: React.FC = () => {
   const [session, setSession] = useState<any>(null);
   const [loadingSession, setLoadingSession] = useState(true);
 
-  // Gallery State
-  const [galleryItems, setGalleryItems] = useState<GalleryItem[]>(MOCK_GALLERY);
-  const [likedIds, setLikedIds] = useState<Set<string>>(new Set());
-
   // API Key State (Still needed for direct Gemini calls if not proxied)
   const [manualKey, setManualKey] = useState('');
   const [showSettings, setShowSettings] = useState(false);
@@ -64,18 +60,13 @@ const App: React.FC = () => {
   };
 
   // Gallery Actions
-  const handleUsePrompt = (item: GalleryItem) => {
+  const handleUsePrompt = (prompt: string, config: any) => {
     setStudioConfig({
-      style: item.tags.style,
-      lighting: item.tags.lighting,
-      camera: item.tags.camera,
+      style: config?.style,
+      lighting: config?.lighting,
+      camera: config?.camera,
     });
-    // Increment usage count locally for now
-    setGalleryItems(prev => prev.map(i =>
-      i.id === item.id
-        ? { ...i, usageCount: i.usageCount + 1 }
-        : i
-    ));
+
     setActiveTab('studio');
 
     setTimeout(() => {
@@ -86,39 +77,12 @@ const App: React.FC = () => {
     }, 100);
   };
 
-  const handleToggleLike = (id: string) => {
-    const isLiked = likedIds.has(id);
-    const newLikedIds = new Set(likedIds);
-    if (isLiked) {
-      newLikedIds.delete(id);
-    } else {
-      newLikedIds.add(id);
-    }
-    setLikedIds(newLikedIds);
-
-    setGalleryItems(prev => prev.map(item =>
-      item.id === id
-        ? { ...item, likes: item.likes + (isLiked ? -1 : 1) }
-        : item
-    ));
-  };
-
   const handlePublishToGallery = (imageUrl: string, config: GenerationConfig, prompt: string) => {
-    // In a real implementation, this would save to Supabase "Generations" table
-    const newItem: GalleryItem = {
-      id: Date.now().toString(),
-      url: imageUrl,
-      prompt: prompt,
-      likes: 0,
-      usageCount: 0,
-      tags: {
-        style: config.style,
-        lighting: config.lighting,
-        camera: config.camera
-      }
-    };
-    setGalleryItems(prev => [newItem, ...prev]);
+    // Studio handles DB insertion now. We just switch tabs or notify if needed.
+    console.log('Published:', imageUrl);
   };
+
+
 
   if (loadingSession) {
     return (
@@ -216,10 +180,7 @@ const App: React.FC = () => {
             <Hero />
             {/* Embedded Gallery Module (Compact) */}
             <Gallery
-              items={galleryItems}
               onUsePrompt={handleUsePrompt}
-              onToggleLike={handleToggleLike}
-              likedIds={likedIds}
               compact={true}
             />
             <div id="studio-section" className="bg-white border-t border-black min-h-screen">
@@ -233,10 +194,7 @@ const App: React.FC = () => {
 
         {activeTab === 'gallery' && (
           <Gallery
-            items={galleryItems}
             onUsePrompt={handleUsePrompt}
-            onToggleLike={handleToggleLike}
-            likedIds={likedIds}
             compact={false}
           />
         )}
