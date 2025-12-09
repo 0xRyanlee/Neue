@@ -181,7 +181,13 @@ export const generateStudioImage = async (
       model: modelName,
       contents: contents,
       config: {
-        imageConfig: imageConfig
+        imageConfig: imageConfig,
+        safetySettings: [
+          { category: 'HARM_CATEGORY_HARASSMENT', threshold: 'BLOCK_ONLY_HIGH' },
+          { category: 'HARM_CATEGORY_HATE_SPEECH', threshold: 'BLOCK_ONLY_HIGH' },
+          { category: 'HARM_CATEGORY_SEXUALLY_EXPLICIT', threshold: 'BLOCK_ONLY_HIGH' },
+          { category: 'HARM_CATEGORY_DANGEROUS_CONTENT', threshold: 'BLOCK_ONLY_HIGH' }
+        ]
       }
     });
 
@@ -195,7 +201,12 @@ export const generateStudioImage = async (
       }
     }
 
-    throw new Error("No image generated.");
+    // Diagnosis Code
+    const candidate = response.candidates?.[0];
+    const failureReason = candidate?.finishReason || "UNKNOWN_REASON";
+    console.error("Generation Failed. Finish Reason:", failureReason, candidate);
+
+    throw new Error(`No image. Server Reason: ${failureReason}`);
   } catch (error: any) {
     console.error("Generation Error Details:", error);
     // Explicitly alert the user for debugging purposes
