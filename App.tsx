@@ -8,6 +8,7 @@ import { MOCK_GALLERY } from './constants';
 import { Lock, Zap, Settings, X, ArrowRight } from 'lucide-react';
 import { Button } from './components/Button';
 import { Auth } from './components/Auth';
+import { GoogleOneTap } from './components/GoogleOneTap';
 import { supabase } from './services/supabase';
 
 const App: React.FC = () => {
@@ -27,8 +28,6 @@ const App: React.FC = () => {
   const [showSettings, setShowSettings] = useState(false);
 
   // Initialize Session
-  const [isGuest, setIsGuest] = useState(localStorage.getItem('neue_guest_mode') === 'true');
-
   useEffect(() => {
     supabase.auth.getSession().then(({ data: { session } }) => {
       setSession(session);
@@ -129,13 +128,11 @@ const App: React.FC = () => {
     );
   }
 
-  if (!session) {
-    return <Auth />;
-  }
+  // Blocking Auth Removed - Direct Access with One Tap
 
   return (
     <div className="min-h-screen flex flex-col bg-[#f5f5f5] text-[#111]">
-
+      {!session && <GoogleOneTap />}
       {/* Settings Modal */}
       {showSettings && (
         <div className="fixed inset-0 z-[100] bg-black/50 backdrop-blur-sm flex items-center justify-center p-4">
