@@ -1,0 +1,8 @@
+{
+  "name": "NEUE STUDIO | AI Salon",
+  "description": "A Swiss-style, AI-powered photography studio simulation. Generate professional portraits, artistic shots, and ID photos with precise control over lighting, camera, and style.",
+  "requestFramePermissions": [
+    "camera",
+    "microphone"
+  ]
+}
