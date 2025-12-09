@@ -18,6 +18,11 @@ export enum PhotoStyle {
   VINTAGE = "Vintage Polaroid"
 }
 
+export enum ModelTier {
+  STANDARD = "gemini-2.5-flash-image", // Nano Banana (Likely Free Tier)
+  PRO = "gemini-3-pro-image-preview"   // High Quality (Requires Billing)
+}
+
 export interface TagCategory {
   id: string;
   name: string;
@@ -46,6 +51,7 @@ export interface ChatMessage {
 }
 
 export interface GenerationConfig {
+  modelTier: ModelTier;
   aspectRatio: AspectRatio;
   style: string;
   lighting: string;

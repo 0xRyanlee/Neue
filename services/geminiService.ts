@@ -1,17 +1,22 @@
 
 import { GoogleGenAI, GenerateContentResponse, Chat, Type } from "@google/genai";
-import { GenerationConfig, TagCategory } from "../types";
+import { GenerationConfig, TagCategory, ModelTier } from "../types";
 import { TAG_CATEGORIES } from "../constants";
 
-// Helper to get API key from process.env. 
-// Note: The App component ensures the user has selected a key before we get here.
-const getApiKey = (): string => {
-  const key = process.env.API_KEY;
-  if (!key) {
-    console.error("API Key not found in process.env.API_KEY");
-    throw new Error("API Key missing. Please set your API key.");
-  }
-  return key;
+// Helper to get API key with priority:
+// 1. LocalStorage (User entered)
+// 2. Process.env (Deployment config)
+// 3. Throw error
+export const getApiKey = (): string => {
+  // Check LocalStorage first (for deployed app user override)
+  const localKey = localStorage.getItem('gemini_api_key');
+  if (localKey) return localKey;
+
+  // Check Process Env (injected by build tool or AI Studio)
+  const envKey = process.env.API_KEY;
+  if (envKey) return envKey;
+
+  throw new Error("API Key missing. Please connect your account or enter a key in settings.");
 };
 
 // 1. Chat Consultation Service
@@ -52,7 +57,7 @@ export const sendMessageToChat = async (chat: Chat, message: string): Promise<st
     return response.text || "processing request...";
   } catch (error) {
     console.error("Chat Error:", error);
-    return "connection unstable. try again.";
+    return "connection unstable. check api key.";
   }
 };
 
@@ -145,21 +150,31 @@ export const generateStudioImage = async (
     });
   }
 
+  // Determine model based on tier
+  // Default to 2.5 flash image (Nano Banana) if standard, 3 Pro if Pro.
+  const modelName = config.modelTier || 'gemini-2.5-flash-image';
+  
+  // Image Config
+  // gemini-3-pro-image-preview supports 'imageSize', gemini-2.5-flash-image does NOT.
+  const imageConfig: any = {
+    aspectRatio: config.aspectRatio,
+  };
+
+  if (modelName === 'gemini-3-pro-image-preview') {
+    imageConfig.imageSize = "2K"; // Only available on Pro
+  }
+
   try {
-    // Using gemini-3-pro-image-preview for high quality generation
-    // This model requires the user to select a paid API key via window.aistudio
     const response = await ai.models.generateContent({
-      model: 'gemini-3-pro-image-preview',
+      model: modelName,
       contents: contents,
       config: {
-        imageConfig: {
-            aspectRatio: config.aspectRatio,
-            imageSize: "2K"
-        }
+        imageConfig: imageConfig
       }
     });
 
     // Extract image
+    // Note: 2.5 Flash and 3 Pro both return inlineData in parts.
     for (const part of response.candidates?.[0]?.content?.parts || []) {
       if (part.inlineData) {
         return `data:image/png;base64,${part.inlineData.data}`;
@@ -167,8 +182,11 @@ export const generateStudioImage = async (
     }
     
     throw new Error("No image generated.");
-  } catch (error) {
+  } catch (error: any) {
     console.error("Generation Error:", error);
+    if (error.message?.includes('403') || error.toString().includes('Permission denied')) {
+        throw new Error(`Permission Denied for model ${modelName}. Try switching to 'Standard' tier or use a paid API key.`);
+    }
     throw error;
   }
 };
