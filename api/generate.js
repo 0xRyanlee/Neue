@@ -44,11 +44,11 @@ export default async function handler(request, response) {
 
         console.log(`[API] Generating with model: ${modelName}`);
 
-        // Call Google AI
-        const model = ai.getGenerativeModel({ model: modelName });
-        const result = await model.generateContent({
-            contents: contents.contents || contents, // Handle potential nesting
-            generationConfig: {
+        // Call Google AI (Using @google/genai v1.0 syntax)
+        const result = await ai.models.generateContent({
+            model: modelName,
+            contents: contents.contents || contents,
+            config: {
                 ...config,
                 safetySettings: safetySettings
             }
