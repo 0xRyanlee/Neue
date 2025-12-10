@@ -106,12 +106,11 @@ export const analyzeTagsFromContext = async (userText: string): Promise<Partial<
   }
 };
 
-// 3. Image Generation Service
+// 3. Image Generation Service (Proxy Mode)
 export const generateStudioImage = async (
   config: GenerationConfig,
   promptOverride?: string
 ): Promise<string> => {
-  const ai = new GoogleGenAI({ apiKey: getApiKey() });
 
   // Construct a detailed prompt based on tags + any override
   const basePrompt = `
@@ -131,7 +130,7 @@ export const generateStudioImage = async (
     ${promptOverride ? `Specific instructions: ${promptOverride}` : ''}
   `;
 
-  // Imagen Model expects prompt as 'text' part
+  // Construct Content Part
   const contents: any = {
     parts: [{ text: basePrompt }]
   };
@@ -139,7 +138,6 @@ export const generateStudioImage = async (
   // Add reference images if they exist
   if (config.referenceImages.length > 0) {
     config.referenceImages.forEach(base64Data => {
-      // Extract specific mime type if available, default to jpeg
       const mimeMatch = base64Data.match(/^data:(image\/[a-zA-Z+]+);base64,/);
       const mimeType = mimeMatch ? mimeMatch[1] : 'image/jpeg';
       const cleanBase64 = base64Data.replace(/^data:image\/[a-z]+;base64,/, "");
@@ -154,66 +152,46 @@ export const generateStudioImage = async (
   }
 
   // Determine model based on tier
-  // Default to Standard (2.0 Flash Exp) for cost efficiency
   const modelName = config.modelTier || 'gemini-2.0-flash-exp';
 
   // Image Config
   const imageConfig: any = {};
-
-  // Aspect Ratio is NOT supported on 2.0 Flash (Standard)
-  // Only add it if we are using Pro (Gemini 3)
   if (!modelName.includes('gemini-2.0-flash')) {
     imageConfig.aspectRatio = config.aspectRatio;
   }
 
-  // Imagen 3/4 specific config
-  // Imagen specific config cleaning
-  // if (modelName.includes('imagen')) { ... }
-
   try {
-    // TIMEOUT WRAPPER
-    const timeoutPromise = new Promise((_, reject) =>
-      setTimeout(() => reject(new Error("Request timed out (15s). Please try again.")), 15000)
-    );
-
-    const apiPromise = ai.models.generateContent({
-      model: modelName,
-      contents: contents,
-      config: {
-        imageConfig: imageConfig,
-        safetySettings: [
-          { category: HarmCategory.HARM_CATEGORY_HARASSMENT, threshold: HarmBlockThreshold.BLOCK_ONLY_HIGH },
-          { category: HarmCategory.HARM_CATEGORY_HATE_SPEECH, threshold: HarmBlockThreshold.BLOCK_ONLY_HIGH },
-          { category: HarmCategory.HARM_CATEGORY_SEXUALLY_EXPLICIT, threshold: HarmBlockThreshold.BLOCK_ONLY_HIGH },
-          { category: HarmCategory.HARM_CATEGORY_DANGEROUS_CONTENT, threshold: HarmBlockThreshold.BLOCK_ONLY_HIGH }
-        ]
-      }
+    // Call our own Vercel API Proxy
+    const response = await fetch('/api/generate', {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+      },
+      body: JSON.stringify({
+        modelName,
+        contents,
+        config: { imageConfig }
+      })
     });
 
-    const response: any = await Promise.race([apiPromise, timeoutPromise]);
+    const data = await response.json();
 
-    // Extract image
-    // Note: 2.5 Flash and 3 Pro both return inlineData in parts.
-    for (const part of response.candidates?.[0]?.content?.parts || []) {
-      if (part.inlineData) {
-        return `data:image/png;base64,${part.inlineData.data}`;
-      }
+    if (!response.ok) {
+      throw new Error(data.error || 'Server Error');
     }
 
-    // Diagnosis Code
-    const candidate = response.candidates?.[0];
-    const failureReason = candidate?.finishReason || "UNKNOWN_REASON";
-    console.error("Generation Failed. Finish Reason:", failureReason, candidate);
+    if (data.image) {
+      return data.image;
+    } else if (data.text) {
+      // Fallback if model generated text (e.g. "I cannot do that")
+      throw new Error(`Model returned text instead of image: ${data.text}`);
+    } else {
+      throw new Error(`No content generated. Reason: ${data.finishReason}`);
+    }
 
-    throw new Error(`No image. Server Reason: ${failureReason}`);
   } catch (error: any) {
-    console.error("Generation Error Details:", error);
-    // Explicitly alert the user for debugging purposes
+    console.error("Generation Error (Proxy):", error);
     alert(`Generation Failed: ${error.message}`);
-
-    if (error.message?.includes('403') || error.toString().includes('Permission denied')) {
-      throw new Error(`Permission Denied. Please ensure your API Key supports ${modelName}.`);
-    }
     throw error;
   }
 };
