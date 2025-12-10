@@ -42,16 +42,24 @@ export default async function handler(request, response) {
             { category: HarmCategory.HARM_CATEGORY_DANGEROUS_CONTENT, threshold: HarmBlockThreshold.BLOCK_ONLY_HIGH }
         ];
 
+        // Generation Config
+        let genConfig = {
+            ...config,
+            safetySettings: safetySettings
+        };
+
+        // SPECIAL CONFIG FOR GEMINI 2.0 FLASH IMAGE GEN
+        if (modelName.includes('flash')) {
+            genConfig.responseModalities = ['IMAGE'];
+        }
+
         console.log(`[API] Generating with model: ${modelName}`);
 
         // Call Google AI (Using @google/genai v1.0 syntax)
         const result = await ai.models.generateContent({
             model: modelName,
             contents: contents.contents || contents,
-            config: {
-                ...config,
-                safetySettings: safetySettings
-            }
+            config: genConfig
         });
 
         // Debug Log
@@ -69,7 +77,11 @@ export default async function handler(request, response) {
 
         if (!candidates || candidates.length === 0) {
             console.error("No candidates returned", responseData);
-            return response.status(500).json({ error: "No candidates returned from AI" });
+            console.error("Prompt Feedback:", responseData.promptFeedback); // Log Safety Block Reason
+            return response.status(500).json({
+                error: "No candidates returned from AI",
+                details: responseData.promptFeedback
+            });
         }
 
         // Check for Finish Reason
