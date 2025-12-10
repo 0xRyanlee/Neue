@@ -54,7 +54,17 @@ export default async function handler(request, response) {
             }
         });
 
-        const responseData = result.response;
+        // Debug Log
+        console.log("[API] Raw Result Keys:", Object.keys(result));
+
+        // SDK V1 Difference: result IS the response object, there is no .response property
+        const responseData = result;
+
+        // Safety Check: responseData could be undefined if generation failed upstream silently
+        if (!responseData) {
+            throw new Error("No response object returned from Google AI.");
+        }
+
         const candidates = responseData.candidates;
 
         if (!candidates || candidates.length === 0) {
