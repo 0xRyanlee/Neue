@@ -48,10 +48,10 @@ export default async function handler(request, response) {
             safetySettings: safetySettings
         };
 
-        // SPECIAL CONFIG FOR GEMINI 2.0 FLASH IMAGE GEN
-        if (modelName.includes('flash')) {
-            genConfig.responseModalities = ['IMAGE'];
-        }
+        // Standard: Imagen 3
+        // Pro: Imagen 3 (High Res / Different param)
+        // No special 'responseModalities' needed for Imagen models
+
 
         console.log(`[API] Generating with model: ${modelName}`);
 

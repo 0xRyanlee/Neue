@@ -152,13 +152,13 @@ export const generateStudioImage = async (
   }
 
   // Determine model based on tier
-  const modelName = config.modelTier || 'gemini-2.0-flash-exp';
+  const modelName = config.modelTier || 'imagen-3.0-generate-002';
 
   // Image Config
   const imageConfig: any = {};
-  if (!modelName.includes('gemini-2.0-flash')) {
-    imageConfig.aspectRatio = config.aspectRatio;
-  }
+  // Only add aspect ratio if we are using Pro (Gemini 3) or Imagen
+  // Imagen models support aspect ratio
+  imageConfig.aspectRatio = config.aspectRatio;
 
   try {
     // Call our own Vercel API Proxy

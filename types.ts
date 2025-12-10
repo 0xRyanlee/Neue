@@ -19,8 +19,8 @@ export enum PhotoStyle {
 }
 
 export enum ModelTier {
-  STANDARD = "gemini-2.0-flash-exp",           // Valid Experimental Model
-  PRO = "gemini-3-pro-image-preview"         // "Nano Banana Pro"
+  STANDARD = "imagen-3.0-generate-002",      // Fast/Standard Imagen
+  PRO = "gemini-3-pro-image-preview"         // High Fidelity
 }
 
 export interface TagCategory {
