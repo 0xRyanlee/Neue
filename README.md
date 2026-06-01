@@ -1,20 +1,21 @@
-<div align="center">
-<img width="1200" height="475" alt="GHBanner" src="https://github.com/user-attachments/assets/0aa67016-6eaf-458a-adb2-6e31a0763ed6" />
-</div>
+# Neue
 
-# Run and deploy your AI Studio app
+> AI 影像編輯工作室
 
-This contains everything you need to run your app locally.
+以 AI 驅動的相片編輯應用，整合 Google Gemini 與 Supabase。
 
-View your app in AI Studio: https://ai.studio/apps/drive/1DtQegp8lvbF8Hkia4lP5cz5CozbzMfqS
+## 技術棧
 
-## Run Locally
+- Vite + React + TypeScript
+- Google GenAI (`@google/genai`)
+- Supabase
+- 部署：Vercel
 
-**Prerequisites:**  Node.js
+## 開發
 
+```bash
+npm install
+npm run dev
+```
 
-1. Install dependencies:
-   `npm install`
-2. Set the `GEMINI_API_KEY` in [.env.local](.env.local) to your Gemini API key
-3. Run the app:
-   `npm run dev`
+需在 `.env.local` 設定 `GEMINI_API_KEY` 與 Supabase 連線資訊。
